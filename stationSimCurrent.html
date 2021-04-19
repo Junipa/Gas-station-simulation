@@ -1,0 +1,920 @@
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    user-select: none;
+  }
+
+  body {
+    font-family: "Helvetica Neue", Helvetica, sans-serif;
+  }
+  
+  .background {
+    width: 100vw;
+    height: 100vh;
+    background: grey;
+  }
+  
+  .title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    width: 100%;
+    height: 10%;
+    font-size: 1.5rem;
+    background: grey;
+  }
+  
+  .screen {
+    margin: auto;
+    width: 75%;
+    height: 65%;
+    background: yellow;
+  }
+  
+  canvas {
+    float:left;
+    width: 66%;
+    height: 100%;
+    background: teal;
+  }
+  
+  .logs {
+    width: 34%;
+    height: 100%;
+    font-size: 0.75rem;
+    background: white;
+    overflow:  auto;
+  }
+  
+  .bar {
+    margin: auto;
+    width: 75%;
+    height: 8%;
+    background: lightgrey;
+  }
+  
+  button {
+    float:left;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 12.5%;
+    height: 100%;
+    border: 0;
+    line-height: 2.5;
+    font-size: 0.5rem;
+    color: #fff;
+    text-shadow: 1px 1px 1px #000;
+    border-radius: 10px;
+    background-color: rgba(0, 0, 220, 1);
+    background-image: linear-gradient(to top left,
+      rgba(0, 0, 0, .2),
+      rgba(0, 0, 0, .2) 30%,
+      rgba(0, 0, 0, 0));
+    box-shadow: inset 2px 2px 3px rgba(255, 255, 255, .6),
+      inset -2px -2px 3px rgba(0, 0, 0, .6);
+  }
+
+  button:hover {
+    background-color: rgba(0, 0, 255, 1);
+  }
+
+  button:active {
+    box-shadow: inset -2px -2px 3px rgba(255, 255, 255, .6),
+      inset 2px 2px 3px rgba(0, 0, 0, .6);
+  }
+
+  button:disabled {
+    background-color: rgba(40, 40, 40, 1);
+  }
+  
+  .slider {
+    float: left;
+    width: 30%;
+    height: 100%;
+  }
+  
+  .speedDisplay {
+    float: left;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20%;
+    height: 100%;
+    font-size: 0.5rem;
+    text-align: center;
+  }
+
+  .time {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 12.5%;
+    height: 100%;
+    font-size: 0.5rem;
+    text-align: center;
+  }
+  
+</style>
+
+<div class="background">
+  <div class="title">GAS STATION SIMULATION</div>
+  <div class="screen">
+    <canvas id="canvas" width="400" height="300">Affichage de la simulation non géré par le navigateur.</canvas>
+    <div class="logs" id="logs">
+      <!-- <div id="logs"/> -->
+    </div>
+  </div>     
+  <div class="bar">
+    <button onclick="onClickStart()" id="buttonStart">Start</button>
+    <button onclick="onClickPause()" id="buttonPause">Pause</button>
+    <button onclick="onClickStop()" id="buttonStop">Stop</button>
+    <div class="slidecontainer">
+        <input type="range" min="50" max="1000" value="500" step="50" onchange="onSlide(this.value)" class="slider" id="speedSlider">
+    </div>
+    <div class="speedDisplay">
+        <div>Vitesse : <span id="sliderValue"> -- </span>ms</div>
+    </div>
+    <div class="time">
+        Heure : <span id="hours"> --</span>:<span id="minutes">--</span>
+    </div>
+  </div> 
+</div>
+
+<script>
+  //RANDOM
+  function randomRange(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min
+  }
+  
+  class Carburant {
+    constructor() {}
+    
+    static getFuelTypeDisplayColor(fuelType) {
+      if (fuelType === Carburant.diesel) {
+        return "black"
+      } else {
+        return "grey"
+      }
+    }
+  }
+  Carburant.diesel = "Diesel"
+  Carburant.sansPlomb = "Sans Plomb"
+
+  //ITERATOR UTILS
+    class TimeStampUtils {
+      static getHoursFromTimeStamp(timeStamp) {
+      return Math.floor(timeStamp/60)
+    }
+    
+    static getMinutesFromTimeStamp(timeStamp) {
+      return timeStamp%60
+    }    
+  }
+  
+  //ENTRY
+  class Entry {
+    constructor(timeStamp, text) {
+      this.timeStamp = timeStamp
+      this.text = text
+    }
+    
+    toString() {
+      return `${TimeStampUtils.getHoursFromTimeStamp(this.timeStamp)}:${TimeStampUtils.getMinutesFromTimeStamp(this.timeStamp)} - ${this.text}\n`
+    }
+  }
+
+  //JOURNAL
+  class Journal {
+    constructor() {
+      this.memory = []
+      this.timeStamp = -1
+    }
+    
+    add(text) {
+      if (this.timeStamp >= 0) {
+        let entry = new Entry(this.timeStamp, text)
+        this.memory.push(entry)
+        if (Journal.displayInConsole) {
+          console.log(entry.toString())
+        }
+        Journal.logDisplay()
+      } else {
+        console.error("TimeStamp < 0") 
+      }
+    }
+    
+    static add(text) {
+      if (Journal.currentJournal !== undefined) {
+        Journal.currentJournal.add(text)
+      } else {
+        console.error("No currentJournal") 
+      }
+    }
+   
+    static initCurrentJournal() {
+        Journal.currentJournal = new Journal()
+    }
+    
+    static updateTimeStamp(timeStamp) {
+      if (Journal.currentJournal !== undefined) {
+        Journal.currentJournal.timeStamp = timeStamp
+      }
+    }
+    
+    static logDisplay() {
+      let display = ""
+      for (let entry of Journal.currentJournal.memory) {
+        display += entry + "<br>"
+      }
+      let element = document.getElementById("logs")
+      element.innerHTML = display
+      element.scrollTop = element.scrollHeight;
+    }
+
+      
+    static enableConsoleDisplay() {
+      Journal.displayInConsole = true
+    }
+    
+    static disableConsoleDisplay() {
+      Journal.displayInConsole = false
+    }
+    
+  }
+  Journal.currentJournal = undefined
+  Journal.displayInConsole = false
+ 
+  //SIMULATION
+  class Simulation {
+    constructor() {
+      this.iterator = 0
+      this.interval = undefined
+    }
+
+    eventManagement() {
+      this.iterator++
+      Journal.updateTimeStamp(this.iterator)
+      timeDisplay()
+      if ((randomRange(1, 100)) < Simulation.generateVehicleChances) {
+        let newVehicle = Vehicle.__generateVehicle()
+        this.station.pumpAffectation(newVehicle)
+      }
+      this.station.stationUpdate()
+    }
+
+    start() {
+      if (this.interval === undefined) {
+        console.log("Start")
+
+        // On init la simulation
+        this.iterator = 0
+        this.station = new Station(2)
+        Journal.initCurrentJournal()
+      } 
+      // On start l'appel récurrent
+      let simulation = this
+      this.interval = setInterval(function() { simulation.eventManagement() }, Simulation.tickValue)
+    }
+
+    readjustSpeed() {
+      if (this.interval !== undefined) {
+        clearInterval(this.interval)
+        let simulation = this
+        this.interval = setInterval(function() { simulation.eventManagement() }, Simulation.tickValue)
+      }
+    }
+
+    pause() {
+      if (this.interval !== undefined) {
+        console.log("Pause")
+        clearInterval(this.interval)
+      }
+    }
+
+    stop() {
+      if (this.interval !== undefined) {
+        console.log("Stop")
+        clearInterval(this.interval)
+        this.interval = undefined
+      }
+    }
+  }
+  Simulation.generateVehicleChances = undefined
+  Simulation.tickValue = undefined
+
+  // STATION REFILL ORDER
+  /***
+   * Class representing orders for refill of the station's fuel tanks
+   *    A refill order consists of :
+   *                          - A delay, indicating the time left before said refill (time attribute)
+   *                          - A tank, target of the refill (tank attribute)
+   *		getTime() :   gets this.time attribute
+   *    isIncomingRefill() : boolean indicating wether or not a refill is incoming                  
+   *		updateTime(amount) : updates the delay before refill (decrements the time attribute)
+   *    placeRefillOrder(tank) :   initiates a refill for a specific tank 
+   *    
+   *			
+   */    
+   class StationRefillOrder {
+    constructor(tank) {
+      this.time = 0
+      this.tank = tank
+      this.state = StationRefillOrder.idleState
+    }
+
+    isIdle() {
+      return (this.state === StationRefillOrder.idleState)
+    }
+
+    isIncomingRefill() {
+      return (this.state === StationRefillOrder.incomingState)
+    }
+
+    isRefilling() {
+      return (this.state === StationRefillOrder.refillingState)
+    }
+
+    isWaiting() {
+      return (this.state === StationRefillOrder.waitingState)
+    }
+
+    refill() {
+      this.state = StationRefillOrder.refillingState
+    }
+
+    updateOrder() {
+      if (this.state === StationRefillOrder.incomingState) {
+        this.time--
+        if (this.time === 0) {
+          this.state = StationRefillOrder.waitingState
+          this.time = StationRefillOrder.refillDuration
+        }
+      } else if (this.state === StationRefillOrder.refillingState) {
+        Journal.add("Remplissage de la cuve en cours.")
+          this.time--
+          if (this.time === 0) {
+            this.tank.addFuel(Station.refillAmount)
+            this.state = StationRefillOrder.idleState
+            Journal.add("Remplissage de la cuve terminé.")
+        }
+      }
+    }
+
+    placeRefillOrder() {
+      this.time = StationRefillOrder.initialDelay
+      this.state = StationRefillOrder.incomingState
+      Journal.add("Un camion-citerne a été commandé")
+    }
+  }
+  StationRefillOrder.initialDelay = undefined
+  StationRefillOrder.refillDuration = undefined
+  StationRefillOrder.incomingState = "incoming"
+  StationRefillOrder.waitingState = "waiting"
+  StationRefillOrder.refillingState = "refilling"
+  StationRefillOrder.idleState = "idle"
+
+  // STATION
+  class Station {
+    constructor(pumpNumber) {
+      this.pumpArray = []
+      for (let i=0; i < pumpNumber; i++) {
+        this.pumpArray.push(new Pump(Station.fuelFlow))
+      }
+      this.tanksArray = []
+      this.tanksArray.push(new Tank(Carburant.diesel, Station.tanksSize))
+      this.tanksArray.push(new Tank(Carburant.sansPlomb, Station.tanksSize))      
+      for (let i=0; i < this.tanksArray.length; i++) {
+        this.__generateTankInitialContent(this.tanksArray[i])
+      }
+      this.stationRefillOrdersArray = []
+      for (let i=0; i < this.tanksArray.length; i++) {
+        this.stationRefillOrdersArray.push(new StationRefillOrder(this.tanksArray[i]))
+      }
+    }
+
+    pumpAffectation(vehicle) {
+      for (let refillOrder of this.stationRefillOrdersArray) {
+        if (refillOrder.isWaiting()) {
+          Journal.add("Station indisponible pour le véhicule entrant; opération de remplissage de la cuve en cours.")
+          return
+        }
+      }
+      for (let i=0; i < this.pumpArray.length; i++) {
+        if (this.pumpArray[i].isPumpAvailable()) {
+          let currentTankAffectation = this.findTank(vehicle.getFuelType())
+          if (currentTankAffectation !== undefined) {
+            this.pumpArray[i].vehicleAffectation(vehicle)
+            Journal.add("Pompe n°" + (i+1) + " : " + vehicle) 
+            this.pumpArray[i].tankAffectation(currentTankAffectation)
+            if (i === 0) {
+              vehicle.setNewPos(175, 50)
+            } else if (i === 1) {
+              vehicle.setNewPos(300, 50)
+            }
+          } else {
+            Journal.add("Le type de carburant nécessaire est indisponible pour le véhicule entrant.")
+          }
+          return
+        }
+      }
+      Journal.add("Aucune pompe : " + vehicle)
+    }
+
+    findTank(fuelType) {
+      for (let i=0; i < this.tanksArray.length; i++) {
+        if (this.tanksArray[i].getFuelType() === fuelType && !this.tanksArray[i].isEmpty()) {
+          return this.tanksArray[i]
+        }
+      }
+      return undefined
+    }
+    
+    stationUpdate() {
+      this.stationDisplay()
+      this.pumpStatusUpdate()
+      this.stationTanksUpdate()
+    }
+
+    pumpStatusUpdate() {
+      for (let i=0; i < this.pumpArray.length; i++) {
+        if (this.pumpArray[i].refill()) {
+          Journal.add("Pompe n°" + (i+1) + " : libre")
+        }
+      }
+    }
+
+    stationTanksUpdate() {
+      for (let i=0; i < this.tanksArray.length; i++) {
+        let currentTank = this.tanksArray[i]
+        let currentRefillOrder = this.stationRefillOrdersArray[i]
+        currentRefillOrder.updateOrder()
+        if (currentTank.needsRefill() && currentRefillOrder.isIdle()) {
+          currentRefillOrder.placeRefillOrder()
+        }
+        if (currentRefillOrder.isWaiting() && this.isStationEmpty()) {
+          currentRefillOrder.refill()
+        }
+      }
+    }
+
+    isStationEmpty() {
+      for (let i=0; i < this.pumpArray.length; i++) {
+        if (!this.pumpArray[i].isPumpAvailable()) {
+          return false
+        }
+      }
+      return true
+    }
+
+    __generateTankInitialContent(tank) {
+      tank.addFuel(Math.floor(randomRange(60, 90) * tank.getTankSize() / 100))        
+    }
+
+    stationDisplay() {
+      //Pumps
+      ctx.clearRect(0, 0, 400, 300)
+      ctx.fillStyle = "black"
+      ctx.fillRect(245, 10, 5, 90)
+      ctx.strokeText("1", 250, 10)
+      ctx.fillStyle = "black"
+      ctx.fillRect(345, 10, 5, 90)
+      ctx.strokeText("2", 350, 10)
+      //Tanks
+      ctx.fillStyle = Carburant.getFuelTypeDisplayColor(this.tanksArray[0].getFuelType())
+      ctx.fillRect(150, 200, 100, 75)
+      Tank.tankDisplay(this.tanksArray[0], 160, 235)
+      ctx.strokeText(this.tanksArray[0].getFuelType(), 150, 195)
+      ctx.fillStyle = Carburant.getFuelTypeDisplayColor(this.tanksArray[1].getFuelType())
+      ctx.fillRect(275, 200, 100, 75)
+      Tank.tankDisplay(this.tanksArray[1], 285, 235)
+      ctx.strokeText(this.tanksArray[1].getFuelType(), 275, 195)
+    }
+  }
+  Station.fuelFlow = undefined
+  Station.tanksSize = undefined
+  Station.refillAmount = undefined
+  
+  
+  // PUMP
+  class Pump {
+    constructor(fuelFlow) {
+      this.fuelFlow = fuelFlow
+      this.currentVehicle = undefined
+      this.currentQuantityFilled = 0
+      this.currentTank = undefined
+    }
+    
+    isPumpAvailable() {
+      return (this.currentVehicle === undefined)
+    }
+
+    vehicleAffectation(vehicle) {
+      if (this.currentVehicle === undefined) {
+        this.currentVehicle = vehicle
+        this.currentQuantityFilled = 0
+      }
+    }
+
+    tankAffectation(tank) {
+      if (this.currentTank === undefined && !tank.isEmpty()) {
+        this.currentTank = tank
+      }
+    }
+
+    refill() {
+      if (this.currentVehicle !== undefined) {
+        this.currentVehicle.displayVehicle()
+        let currentFlow = 0
+        while (!this.currentTank.isEmpty() && !this.currentVehicle.isTankFull() && currentFlow < 20) {
+          currentFlow++
+          this.currentTank.removeFuel(1)
+          this.currentVehicle.addFuel(1)
+          this.currentQuantityFilled++
+        }
+        if (this.currentVehicle.isTankFull() || this.currentTank.isEmpty()) {
+          if (this.currentTank.isEmpty()) {
+            Journal.add("Il n'y a plus assez de carburant dans la citerne pour terminer le remplissage.")
+          }
+          this.currentVehicle = undefined
+          this.currentTank = undefined
+          return true
+        } else {
+          return false
+        }
+      }
+      return false
+    }
+  }
+  
+  // TANK
+  /***
+   * Class representing fuel tanks
+   *
+   *    getFuelType() :
+   *    getTankSize() :
+   *    getTankContent() :
+   *		isTankFull() : boolean indicating wether or not the tank is at full capacity
+   *		addFuel(quantity) :  adds specified quantity of fuel to a tank, or quantity sufficient to fill the tank
+   *                             returns effective quantity filled
+   *		removeFuel(quantity) : removes specified quantity of fuel from a tank, or quantity sufficient to empty tthe tank
+   *                             returns effective quantity removed
+   *    needsRefill() :
+   *    isEmpty() : boolean indicating whether or not the tank is empty
+   *			
+   */
+  class Tank {
+    constructor(fuelType, tankSize) {
+      this.fuelType = fuelType
+      this.tankSize = tankSize
+      this.tankContent = 0
+    }
+        
+    getFuelType() {
+      return this.fuelType 
+    }
+
+    getTankSize() {
+      return this.tankSize 
+    }
+    
+    getTankContent() {
+      return this.tankContent
+    }
+    
+    isTankFull() {
+      return (this.tankContent === this.tankSize)
+    }
+       
+    addFuel(quantity) {
+      let quantityFilled = Math.min((this.tankSize - this.tankContent), quantity)
+      this.tankContent += quantityFilled
+      return quantityFilled
+    }
+    
+    removeFuel(quantity) {
+      let quantityRemoved = Math.min(this.tankContent, quantity)
+      this.tankContent -= quantityRemoved
+      return quantityRemoved
+    }
+    
+    needsRefill() {
+      if (this.tankContent <= Tank.needsRefillThreshold * this.tankSize / 100) {
+        return true
+      }
+    }
+    isEmpty() {
+      return (this.tankContent < Tank.isEmptyThreshold)
+    }
+    
+    toString(){
+      return `Réservoir :\tType de carburant : ${this.fuelType}\tCapacité : ${this.tankSize}\tQuantité de carburant du réservoir : ${this.tankContent}`
+    }
+
+    static tankDisplay(tank, xPos, yPos) {
+      ctx.fillStyle = "black"
+      ctx.fillRect(xPos, yPos, 10, 40)
+      if (tank.getTankContent() < (26 * tank.getTankSize() / 100)) {
+        ctx.fillStyle = "red"
+        ctx.fillRect(xPos + 1, yPos + 31, 8, 8)
+      } else if (tank.getTankContent() < (51 * tank.getTankSize() / 100)) {
+        ctx.fillStyle = "orange"
+        ctx.fillRect(xPos + 1, yPos + 31, 8, 8)
+        ctx.fillRect(xPos + 1, yPos + 21, 8, 8)
+      } else if (tank.getTankContent() < (76 * tank.getTankSize() / 100)) {
+        ctx.fillStyle = "yellow"
+        ctx.fillRect(xPos + 1, yPos + 31, 8, 8)
+        ctx.fillRect(xPos + 1, yPos + 21, 8, 8)
+        ctx.fillRect(xPos + 1, yPos + 11, 8, 8)
+      } else if (tank.getTankContent() > (76 * tank.getTankSize() / 100)) {
+        ctx.fillStyle = "green"
+        ctx.fillRect(xPos + 1, yPos + 31, 8, 8)
+        ctx.fillRect(xPos + 1, yPos + 21, 8, 8)
+        ctx.fillRect(xPos + 1, yPos + 11, 8, 8)
+        ctx.fillRect(xPos + 1, yPos + 1, 8, 8)
+      } else if (tank.getTankContent() < 21) {
+
+      }
+    }
+  }
+  Tank.needsRefillThreshold = undefined
+  Tank.isEmptyThreshold = undefined
+  
+  // VEHICLE
+  class Vehicle {
+    constructor(fuelType, tankSize) {
+      this.tank = new Tank(fuelType, tankSize)
+      this.__generateTankInitialContent()
+      this.registration = ++Vehicle.lastRegistration + "-"
+      this.xPos = 20
+      this.yPos = 20
+    }
+
+    getFuelType() {
+      return this.tank.getFuelType()
+    }
+
+    getTankSize() {
+      return this.tank.getTankSize()
+    }
+    
+    getTankContent() {
+      return this.tank.getTankContent()
+    }
+    
+    addFuel(quantity) {
+      return this.tank.addFuel(quantity)
+    }
+            
+    isTankFull() {
+      return this.tank.isTankFull()
+    }
+    
+    __generateTankInitialContent() {
+      this.tank.addFuel(Math.floor(randomRange(Vehicle.tankInitialContentMin, Vehicle.tankInitialContentMax) * this.tank.getTankSize() / 100))
+    }
+
+    setNewPos(xPos, yPos) {
+      this.xPos = xPos
+      this.yPos = yPos
+    }
+    
+    static __generateVehicle() {
+      let type = randomRange(1, 3)
+      if (type === 1) {
+        return new Truck()
+      } else if (type === 2) {
+        return new Car()
+      } else if (type === 3) {
+        return new Bike()
+      }
+    }
+
+    typeToString() {
+      console.error("Define in subclass.")
+    }
+
+    toString() {
+      //Fonction générant une string contenant les caractéristiques d'un véhicule
+      return `Type de véhicule : ${this.typeToString()}\tCapacité du réservoir : ${this.getTankSize()}\tImmatriculation : ${this.registration}\tType de carburant : ${this.getFuelType()}\tQuantité de carburant : ${this.getTankContent()}L`
+    }
+
+    displayVehicle() {
+      console.error("Define in subclass.")
+    }
+  }
+  Vehicle.lastRegistration = 0
+  Vehicle.tankInitialContentMin = undefined
+  Vehicle.tankInitialContentMax = undefined 
+
+  class Truck extends Vehicle {
+    constructor() {
+      super(Truck.__generateFuelType(), Truck.__generateTankSize())
+    }
+
+    static __generateFuelType() {
+      return Carburant.diesel
+    }
+
+    static __generateTankSize() {
+      return randomRange(Truck.tankSizeMin, Truck.tankSizeMax)
+    }
+
+    typeToString() {
+      return "Camion"
+    }
+
+    displayVehicle() {
+      ctx.fillStyle = Carburant.getFuelTypeDisplayColor(this.getFuelType())
+      ctx.fillRect(this.xPos, this.yPos, 40, 60)
+      Tank.tankDisplay(this.tank, this.xPos - 12, this.yPos)
+      ctx.strokeText(this.registration, this.xPos, this.yPos)
+    }
+  }
+  Truck.tankSizeMin = undefined
+  Truck.tankSizeMax = undefined
+
+  class Car extends Vehicle{
+    constructor() {
+      super(Car.__generateFuelType(), Car.__generateTankSize())
+    }
+
+    static __generateFuelType() {
+      let type = randomRange(1, 100)
+      if (type <= Car.sansPlombChances) {
+        return Carburant.sansPlomb
+      } else {
+        return Carburant.diesel
+      }
+    }
+
+    static __generateTankSize() {
+      return randomRange(Car.tankSizeMin, Car.tankSizeMax)
+    }
+
+    typeToString() {
+      return "Voiture"
+    }
+
+    displayVehicle() {
+      ctx.fillStyle = Carburant.getFuelTypeDisplayColor(this.getFuelType())
+      ctx.beginPath()
+      ctx.moveTo(this.xPos, this.yPos + 60)
+      ctx.lineTo(this.xPos + 20, this.yPos)
+      ctx.lineTo(this.xPos + 40, this.yPos + 60)
+      ctx.fill()
+      Tank.tankDisplay(this.tank, this.xPos - 12, this.yPos)
+      ctx.strokeText(this.registration, this.xPos, this.yPos)
+    }
+  }
+  Car.sansPlombChances = undefined
+  Car.tankSizeMin = undefined
+  Car.tankSizeMax = undefined
+
+  class Bike extends Vehicle{
+    constructor() {
+      super(Bike.__generateFuelType(), Bike.__generateTankSize())
+    }
+
+    static __generateFuelType() {
+      return Carburant.sansPlomb
+    }
+
+    static __generateTankSize() {
+      return randomRange(Bike.tankSizeMin, Bike.tankSizeMax)
+    }
+
+    typeToString() {
+      return "Deux-roues"
+    }
+
+    displayVehicle() {
+      ctx.fillStyle = Carburant.getFuelTypeDisplayColor(this.getFuelType())
+      ctx.beginPath()
+      ctx.moveTo(this.xPos, this.yPos +30)
+      ctx.lineTo(this.xPos + 20, this.yPos)
+      ctx.lineTo(this.xPos + 40, this.yPos + 30)
+      ctx.lineTo(this.xPos +20, this.yPos + 60)
+      ctx.fill()
+      Tank.tankDisplay(this.tank, this.xPos - 12, this.yPos)
+      ctx.strokeText(this.registration, this.xPos, this.yPos)
+    }
+  }
+  Bike.tankSizeMin = undefined
+  Bike.tankSizeMax = undefined
+
+
+  const simulation = new Simulation()
+
+  document.getElementById("buttonStop").disabled = true
+
+  function onClickStart() {
+    document.getElementById("buttonStart").disabled = true
+    document.getElementById("buttonPause").disabled = false
+    document.getElementById("buttonStop").disabled = false
+    simulation.start()
+  }
+
+  function onClickPause() {
+    document.getElementById("buttonStart").disabled = false
+    document.getElementById("buttonPause").disabled = true
+    document.getElementById("buttonStop").disabled = false
+    simulation.pause()
+  }
+
+  function onClickStop() {
+    document.getElementById("buttonStart").disabled = false
+    document.getElementById("buttonPause").disabled = true
+    document.getElementById("buttonStop").disabled = true
+    simulation.stop()
+  }
+
+  function onSlide(speed) {
+    Simulation.tickValue = speed
+    document.getElementById("sliderValue").innerHTML = Simulation.tickValue
+    simulation.readjustSpeed()
+  }
+  
+  function initSlider() {
+    document.getElementById("speedSlider").value = Simulation.tickValue
+    document.getElementById("sliderValue").innerHTML = Simulation.tickValue
+  }
+  
+  function timeDisplay() {
+    let hour = TimeStampUtils.getHoursFromTimeStamp(simulation.iterator)
+    let displayedHour = ""
+    if (hour < 10) {
+      displayedHour = "0"
+    }
+      displayedHour += hour
+    document.getElementById("hours").innerHTML = displayedHour
+    let minute = TimeStampUtils.getMinutesFromTimeStamp(simulation.iterator)
+    let displayedMinute = ""
+    if (minute < 10) {
+      displayedMinute = "0"
+    }
+    displayedMinute += minute
+    document.getElementById("minutes").innerHTML = displayedMinute
+  }
+
+  function initSimulation() {
+    Simulation.generateVehicleChances = 15
+    Simulation.tickValue = 500
+    StationRefillOrder.initialDelay = 60
+    StationRefillOrder.refillDuration = 20
+    Station.fuelFlow = 20
+    Station.tanksSize = 50000
+    Station.refillAmount = 40000
+    Tank.needsRefillThreshold = 20
+    Tank.isEmptyThreshold = 18
+    Vehicle.tankInitialContentMin = 0
+    Vehicle.tankInitialContentMax = 20
+    Truck.tankSizeMin = 100
+    Truck.tankSizeMax = 400
+    Car.sansPlombChances = 80
+    Car.tankSizeMin = 50
+    Car.tankSizeMax = 100
+    Bike.tankSizeMin = 20
+    Bike.tankSizeMax = 50
+  }
+
+  function overloadTestValues() {
+    Station.tanksSize = 500
+    Station.refillAmount = 400
+    Journal.enableConsoleDisplay()
+  }
+
+  function displayValues() {
+    console.log(
+      `Chances de générer un véhicules : ${Simulation.generateVehicleChances}%
+      Vitesse : ${Simulation.tickValue}ms
+      Délai avant ravitaillement : ${StationRefillOrder.initialDelay}mn
+      Durée du ravitaillement : ${StationRefillOrder.refillDuration}mn
+      Débit des pompes : ${Station.fuelFlow}L/mn
+      Taille des cuves : ${Station.tanksSize}L
+      Volume du ravitaillement : ${Station.refillAmount}L
+      Seuil de ravitaillement : ${Tank.needsRefillThreshold}%
+      Seuil cuve vide : ${Tank.isEmptyThreshold}L
+      Contenu initial du réservoir min. : ${Vehicle.tankInitialContentMin}L
+      Contenu initial du réservoir max. : ${Vehicle.tankInitialContentMax}L
+      Taille du réservoir min. camion : ${Truck.tankSizeMin}L
+      Taille du réservoir max. camion : ${Truck.tankSizeMax}L
+      Chances de sansPlomb voiture : ${Car.sansPlombChances}%
+      Taille du réservoir min. voiture : ${Car.tankSizeMin}L
+      Taille du réservoir max. voiture : ${Car.tankSizeMax}L
+      Taille du réservoir min. deux-roues : ${Bike.tankSizeMin}L
+      Taille du réservoir max. deux-roues : ${Bike.tankSizeMax}L`
+    )
+  }
+
+  //CANVAS
+  const ctx = canvas.getContext("2d")
+  
+
+  initSimulation()
+  overloadTestValues()
+  displayValues()
+  initSlider()
+</script>
